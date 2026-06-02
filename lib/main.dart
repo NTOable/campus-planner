@@ -137,7 +137,7 @@ void main() async {
   }
 
   await DatabaseHelper.instance.initDb();
-  await DatabaseHelper.instance.initializeUsers();
+  // await DatabaseHelper.instance.initializeUsers();
 
   runApp(const MyApp());
 }

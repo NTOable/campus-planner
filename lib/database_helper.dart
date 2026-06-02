@@ -16,8 +16,9 @@ class DatabaseHelper {
   Future<Database> initDb() async {
     String databasesPath = await getDatabasesPath();
     String path = join(databasesPath, 'geeksforgeeks.db');
-
-    return await openDatabase(path, version: 1, onCreate: _onCreate);
+    // Change below to reset current database
+    // return await openDatabase(path, version: 1, onCreate: _onCreate);
+    return await resetDatabase();
   }
 
   Future _onCreate(Database db, int version) async {
@@ -28,6 +29,11 @@ class DatabaseHelper {
         email TEXT
       )
     ''');
+  }
+
+  Future resetDatabase() async {
+    String path = join(await getDatabasesPath(), 'geeksforgeeks.db');
+    await deleteDatabase(path);
   }
 
   Future<int> insertUser(User user) async {
@@ -55,16 +61,17 @@ class DatabaseHelper {
     return await db.delete('gfg_users', where: 'id = ?', whereArgs: [id]);
   }
 
-  Future<void> initializeUsers() async {
-    List<User> usersToAdd = [
-      User(username: 'John', email: 'john@example.com'),
-      User(username: 'Jane', email: 'jane@example.com'),
-      User(username: 'Alice', email: 'alice@example.com'),
-      User(username: 'Bob', email: 'bob@example.com'),
-    ];
-
-    for (User user in usersToAdd) {
-      await insertUser(user);
-    }
-  }
+  // Uncomment to create
+  // Future<void> initializeUsers() async {
+  //   List<User> usersToAdd = [
+  //     User(username: 'John', email: 'john@example.com'),
+  //     User(username: 'Jane', email: 'jane@example.com'),
+  //     User(username: 'Alice', email: 'alice@example.com'),
+  //     User(username: 'Bob', email: 'bob@example.com'),
+  //   ];
+  //
+  //   for (User user in usersToAdd) {
+  //     await insertUser(user);
+  //   }
+  // }
 }
