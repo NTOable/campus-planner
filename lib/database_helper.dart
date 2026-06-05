@@ -18,8 +18,7 @@ class DatabaseHelper {
     String databasesPath = await getDatabasesPath();
     String path = join(databasesPath, 'geeksforgeeks.db');
     // Change below to reset current database
-    // return await openDatabase(path, version: 1, onCreate: _onCreate);
-    return await resetDatabase();
+    return await openDatabase(path, version: 1, onCreate: _onCreate);
   }
 
   Future _onCreate(Database db, int version) async {
@@ -29,14 +28,15 @@ class DatabaseHelper {
         username TEXT,
         email TEXT
       )
-      CREATE TABLE gfg_events (
-      id INTEGER PRIMARY KEY,
-      title TEXT, 
-      location TEXT, 
-      head_count INT
-      )
     ''');
   }
+
+  //       CREATE TABLE gfg_events (
+  //       id INTEGER PRIMARY KEY,
+  //       title TEXT,
+  //       location TEXT,
+  //       head_count INT
+  //       )
 
   Future resetDatabase() async {
     String path = join(await getDatabasesPath(), 'geeksforgeeks.db');
@@ -48,27 +48,31 @@ class DatabaseHelper {
     return await db.insert('gfg_users', user.toMap());
   }
 
+  Future<int> insertEvent(Event event) async {
+    Database db = await instance.db;
+    return await db.insert('gfg_events', event.toMap());
+  }
+
   Future<List<Map<String, dynamic>>> queryAllUsers() async {
     Database db = await instance.db;
     return await db.query('gfg_users');
   }
 
-  Future<int> updateUser(User user) async {
-    Database db = await instance.db;
-    return await db.update(
-      'gfg_users',
-      user.toMap(),
-      where: 'id = ?',
-      whereArgs: [user.id],
-    );
-  }
+  // Future<int> updateUser(User user) async {
+  //   Database db = await instance.db;
+  //   return await db.update(
+  //     'gfg_users',
+  //     user.toMap(),
+  //     where: 'id = ?',
+  //     whereArgs: [user.id],
+  //   );
+  // }
 
   Future<int> deleteUser(int id) async {
     Database db = await instance.db;
     return await db.delete('gfg_users', where: 'id = ?', whereArgs: [id]);
   }
 
-  // Uncomment to create
   // Future<void> initializeUsers() async {
   //   List<User> usersToAdd = [
   //     User(username: 'John', email: 'john@example.com'),
@@ -79,11 +83,6 @@ class DatabaseHelper {
   //   }
   // }
 
-  Future<int> insertEvent(Event event) async {
-    Database db = await instance.db;
-    return await db.insert('gfg_events', event.toMap());
-  }
-
   Future <void> initializeEvents() async {
     List<Event> eventsToAdd = [
       Event(title: 'Test', location: '5th Floor', headCount: 20)
@@ -93,4 +92,5 @@ class DatabaseHelper {
       await insertEvent(event);
     }
   }
+
 }

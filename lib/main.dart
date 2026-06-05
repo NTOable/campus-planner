@@ -138,6 +138,8 @@ void main() async {
 
   await DatabaseHelper.instance.initDb();
   // await DatabaseHelper.instance.initializeUsers();
+  await DatabaseHelper.instance.resetDatabase();
+  // await DatabaseHelper.instance.initializeEvents();
   runApp(const MyApp());
 }
 
