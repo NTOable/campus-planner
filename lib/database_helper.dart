@@ -1,6 +1,7 @@
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 import 'user.dart';
+import 'event.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._instance();
@@ -27,6 +28,12 @@ class DatabaseHelper {
         id INTEGER PRIMARY KEY,
         username TEXT,
         email TEXT
+      )
+      CREATE TABLE gfg_events (
+      id INTEGER PRIMARY KEY,
+      title TEXT, 
+      location TEXT, 
+      head_count INT
       )
     ''');
   }
@@ -65,13 +72,25 @@ class DatabaseHelper {
   // Future<void> initializeUsers() async {
   //   List<User> usersToAdd = [
   //     User(username: 'John', email: 'john@example.com'),
-  //     User(username: 'Jane', email: 'jane@example.com'),
-  //     User(username: 'Alice', email: 'alice@example.com'),
-  //     User(username: 'Bob', email: 'bob@example.com'),
   //   ];
   //
   //   for (User user in usersToAdd) {
   //     await insertUser(user);
   //   }
   // }
+
+  Future<int> insertEvent(Event event) async {
+    Database db = await instance.db;
+    return await db.insert('gfg_events', event.toMap());
+  }
+
+  Future <void> initializeEvents() async {
+    List<Event> eventsToAdd = [
+      Event(title: 'Test', location: '5th Floor', headCount: 20)
+    ];
+
+    for (Event event in eventsToAdd) {
+      await insertEvent(event);
+    }
+  }
 }

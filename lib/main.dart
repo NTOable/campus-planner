@@ -138,7 +138,6 @@ void main() async {
 
   await DatabaseHelper.instance.initDb();
   // await DatabaseHelper.instance.initializeUsers();
-
   runApp(const MyApp());
 }
 
@@ -150,14 +149,15 @@ class MyApp extends StatelessWidget {
     return MaterialApp(title: 'User Management', home: UserList());
   }
 }
-
+// extends class StatefulWidget, 
 class UserList extends StatefulWidget {
   const UserList({super.key});
 
   @override
   _UserListState createState() => _UserListState();
 }
-
+// extends class UserList, creates a list to hold records under _users, overrides initState() function
+// to initialize a constructor alongside a function to fetch the records
 class _UserListState extends State<UserList> {
   List<User> _users = [];
 
@@ -166,14 +166,14 @@ class _UserListState extends State<UserList> {
     super.initState();
     _fetchUsers();
   }
-
+  // Gets the rows from the table via database_helper.dart
   Future<void> _fetchUsers() async {
     final userMaps = await DatabaseHelper.instance.queryAllUsers();
     setState(() {
       _users = userMaps.map((userMap) => User.fromMap(userMap)).toList();
     });
   }
-
+  // Main UI
   @override
   Widget build(BuildContext context) {
     return Scaffold(
