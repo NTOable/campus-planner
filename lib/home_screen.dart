@@ -3,6 +3,12 @@ import 'package:campus_planner/user.dart';
 import 'package:campus_planner/event.dart';
 import 'package:campus_planner/database_helper.dart';
 import 'package:campus_planner/login_screen.dart';
+import 'package:campus_planner/location_screen.dart';
+
+const Color academicColor = Color(0xFF00BCD4);
+const Color campusColor = Color(0xFFE91E63);
+const Color calendarOutline = Color(0xFFB3E5FC);
+const Color dateNumberColor = Color(0xFFE91E63);
 
 class HomeScreen extends StatefulWidget {
   final User user;
@@ -13,62 +19,84 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  String _selectedType = 'academic';
-  List<Event> _events = [];
+  bool _isCalendarView = true;
+  late DateTime _currentMonth;
+  List<Event> _allMonthEvents = [];
   List<Event> _filteredEvents = [];
+  Event? _selectedEvent;
+  bool _isRegistered = false;
   final TextEditingController _searchController = TextEditingController();
+
+  static const _monthNames = ['January','February','March','April','May','June',
+    'July','August','September','October','November','December'];
+  static const _weekdays = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
   @override
   void initState() {
     super.initState();
-    _loadEvents();
+    _currentMonth = DateTime(2026, 3);
+    _loadMonthEvents();
   }
 
-  Future<void> _loadEvents() async {
-    final events = await DatabaseHelper.instance.getEventsByType(_selectedType);
-    if (!mounted) return;
-    setState(() {
-      _events = events;
-      _filteredEvents = events;
-    });
-  }
-
-  void _switchType(String type) {
-    setState(() => _selectedType = type);
-    _loadEvents();
-    _searchController.clear();
-  }
-
-  void _onSearch(String query) {
-    setState(() {
-      if (query.isEmpty) {
-        _filteredEvents = _events;
-      } else {
-        _filteredEvents = _events.where((e) =>
-          e.title.toLowerCase().contains(query.toLowerCase()) ||
-          e.description.toLowerCase().contains(query.toLowerCase()) ||
-          e.location.toLowerCase().contains(query.toLowerCase())
-        ).toList();
-      }
-    });
-  }
-
-  Future<void> _showEventDetails(Event event) async {
-    final isRegistered = await DatabaseHelper.instance.isUserRegistered(
-      event.id!, widget.user.id!,
+  Future<void> _loadMonthEvents() async {
+    final events = await DatabaseHelper.instance.getEventsByMonth(
+      _currentMonth.year, _currentMonth.month,
     );
     if (!mounted) return;
-    showModalBottomSheet(
-      context: context,
-      builder: (ctx) => SafeArea(
-        child: _EventDetailSheet(
-          event: event,
-          isRegistered: isRegistered,
-          userId: widget.user.id!,
-          onChanged: _loadEvents,
-        ),
-      ),
-    );
+    setState(() { _allMonthEvents = events; _applyFilter(); });
+  }
+
+  void _applyFilter() {
+    final q = _searchController.text.trim().toLowerCase();
+    _filteredEvents = q.isEmpty
+        ? List.from(_allMonthEvents)
+        : _allMonthEvents.where((e) =>
+            e.title.toLowerCase().contains(q) ||
+            e.description.toLowerCase().contains(q) ||
+            e.location.toLowerCase().contains(q)).toList();
+    if (_selectedEvent != null &&
+        !_filteredEvents.any((e) => e.id == _selectedEvent!.id)) {
+      _selectedEvent = null;
+    }
+  }
+
+  void _previousMonth() {
+    setState(() { _currentMonth = DateTime(_currentMonth.year, _currentMonth.month - 1, 1); _selectedEvent = null; });
+    _loadMonthEvents();
+  }
+
+  void _nextMonth() {
+    setState(() { _currentMonth = DateTime(_currentMonth.year, _currentMonth.month + 1, 1); _selectedEvent = null; });
+    _loadMonthEvents();
+  }
+
+  Color _eventColor(Event e) => e.type == 'academic' ? academicColor : campusColor;
+  Color _contrastColor(String t) => t == 'academic' ? campusColor : academicColor;
+
+  Future<void> _selectEvent(Event event) async {
+    final reg = await DatabaseHelper.instance.isUserRegistered(event.id!, widget.user.id!);
+    if (!mounted) return;
+    setState(() { _selectedEvent = event; _isRegistered = reg; });
+  }
+
+  Future<void> _registerForEvent() async {
+    if (_selectedEvent == null) return;
+    final ok = await DatabaseHelper.instance.registerForEvent(_selectedEvent!.id!, widget.user.id!);
+    if (ok) {
+      await _loadMonthEvents();
+      final updated = _allMonthEvents.firstWhere((e) => e.id == _selectedEvent!.id);
+      if (!mounted) return;
+      setState(() { _isRegistered = true; _selectedEvent = updated; });
+    }
+  }
+
+  Future<void> _cancelRegistration() async {
+    if (_selectedEvent == null) return;
+    await DatabaseHelper.instance.cancelRegistration(_selectedEvent!.id!, widget.user.id!);
+    await _loadMonthEvents();
+    final updated = _allMonthEvents.firstWhere((e) => e.id == _selectedEvent!.id);
+    if (!mounted) return;
+    setState(() { _isRegistered = false; _selectedEvent = updated; });
   }
 
   void _showProfileMenu() {
@@ -81,21 +109,16 @@ class _HomeScreenState extends State<HomeScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(widget.user.username,
-                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+              Text(widget.user.username, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
               const SizedBox(height: 4),
-              Text(widget.user.email,
-                style: const TextStyle(color: Colors.grey)),
+              Text(widget.user.email, style: const TextStyle(color: Colors.grey)),
               const SizedBox(height: 20),
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton.icon(
                   onPressed: () {
                     Navigator.pop(context);
-                    Navigator.pushReplacement(
-                      context,
-                      MaterialPageRoute(builder: (_) => const LoginScreen()),
-                    );
+                    Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const LoginScreen()));
                   },
                   icon: const Icon(Icons.logout),
                   label: const Text('Sign Out'),
@@ -120,313 +143,424 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         title: const Text('Campus Planner'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.account_circle),
-            onPressed: _showProfileMenu,
-            tooltip: 'Profile',
-          ),
+          IconButton(icon: const Icon(Icons.account_circle), onPressed: _showProfileMenu, tooltip: 'Profile'),
         ],
       ),
       body: Column(
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
-            child: TextField(
-              controller: _searchController,
-              decoration: const InputDecoration(
-                hintText: 'Search events...',
-                prefixIcon: Icon(Icons.search),
-                border: OutlineInputBorder(),
-                contentPadding: EdgeInsets.symmetric(vertical: 12),
-              ),
-              onChanged: _onSearch,
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-            child: Row(
-              children: [
-                Expanded(child: _buildToggle('academic', 'Academic')),
-                const SizedBox(width: 8),
-                Expanded(child: _buildToggle('campus', 'Campus Events')),
-              ],
-            ),
-          ),
-          const SizedBox(height: 4),
+          _buildHeader(),
+          _buildSearchBar(),
+          Expanded(flex: 4, child: _isCalendarView ? _buildCalendarView() : _buildEventList()),
+          const Divider(height: 1, thickness: 1, color: Color(0xFFE0E0E0)),
+          Expanded(flex: 2, child: _buildDetailsPanel()),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeader() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+      child: Row(
+        children: [
+          IconButton(icon: const Icon(Icons.chevron_left), onPressed: _previousMonth),
           Expanded(
-            child: _filteredEvents.isEmpty
-              ? const Center(child: Text('No events found'))
-              : ListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  itemCount: _filteredEvents.length,
-                  itemBuilder: (context, index) {
-                    return _EventCard(
-                      event: _filteredEvents[index],
-                      onTap: () => _showEventDetails(_filteredEvents[index]),
-                    );
-                  },
-                ),
+            child: Text(
+              '${_monthNames[_currentMonth.month - 1]} ${_currentMonth.year}',
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+          ),
+          IconButton(icon: const Icon(Icons.chevron_right), onPressed: _nextMonth),
+          const SizedBox(width: 4),
+          IconButton(
+            icon: Icon(_isCalendarView ? Icons.list : Icons.calendar_month),
+            onPressed: () => setState(() => _isCalendarView = !_isCalendarView),
+            tooltip: _isCalendarView ? 'List view' : 'Calendar view',
           ),
         ],
       ),
     );
   }
 
-  Widget _buildToggle(String type, String label) {
-    final isSelected = _selectedType == type;
-    return GestureDetector(
-      onTap: () => _switchType(type),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10),
-        decoration: BoxDecoration(
-          color: isSelected ? Theme.of(context).primaryColor : Colors.grey.shade200,
-          borderRadius: BorderRadius.circular(8),
+  Widget _buildSearchBar() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
+      child: TextField(
+        controller: _searchController,
+        decoration: InputDecoration(
+          hintText: 'Search events...',
+          prefixIcon: const Icon(Icons.search, color: Colors.grey),
+          filled: true,
+          fillColor: Colors.grey.shade100,
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+          contentPadding: const EdgeInsets.symmetric(vertical: 10),
         ),
-        child: Center(
-          child: Text(
-            label,
-            style: TextStyle(
-              color: isSelected ? Colors.white : Colors.black87,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ),
+        onChanged: (_) { _applyFilter(); setState(() {}); },
       ),
     );
   }
-}
 
-class _EventCard extends StatelessWidget {
-  final Event event;
-  final VoidCallback onTap;
+  // ─── CALENDAR VIEW ──────────────────────────────────────────────
 
-  const _EventCard({required this.event, required this.onTap});
+  Widget _buildCalendarView() {
+    if (_filteredEvents.isEmpty && _allMonthEvents.isNotEmpty) {
+      return const Center(child: Text('No events match your search'));
+    }
+    final year = _currentMonth.year, month = _currentMonth.month;
+    final daysInMonth = DateTime(year, month + 1, 0).day;
+    final startOffset = DateTime(year, month, 1).weekday % 7;
 
-  @override
-  Widget build(BuildContext context) {
-    final bool isFull = event.registeredCount >= event.capacity;
-    final bool unlimited = event.capacity >= 9999;
+    final eventsByDay = <int, List<Event>>{};
+    final maxCols = _allMonthEvents.isEmpty ? 1 : 2;
+    for (final e in _allMonthEvents) {
+      final parts = e.date.split('-');
+      if (parts.length == 3) {
+        final d = int.tryParse(parts[2]) ?? 0;
+        if (d >= 1 && d <= daysInMonth) {
+          eventsByDay.putIfAbsent(d, () => []).add(e);
+        }
+      }
+    }
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Row(
-            children: [
-              Container(
-                width: 50,
-                height: 50,
-                decoration: BoxDecoration(
-                  color: Theme.of(context).primaryColor.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Center(
-                  child: Text(
-                    event.date.length >= 10 ? event.date.substring(8, 10) : event.date,
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Theme.of(context).primaryColor,
-                    ),
-                  ),
-                ),
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: Column(
+        children: [
+          // Day-of-week headers
+          Row(
+            children: List.generate(7, (i) => Expanded(
+              child: Center(
+                child: Text(_weekdays[i], style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.grey)),
               ),
-              const SizedBox(width: 14),
-              Expanded(
+            )),
+          ),
+          const SizedBox(height: 2),
+          // Calendar grid
+          ..._buildCalendarRows(daysInMonth, startOffset, eventsByDay, maxCols),
+        ],
+      ),
+    );
+  }
+
+  List<Widget> _buildCalendarRows(int daysInMonth, int startOffset, Map<int, List<Event>> eventsByDay, int maxCols) {
+    final rows = <Widget>[];
+    int day = 1;
+    for (int row = 0; row < 6 && day <= daysInMonth; row++) {
+      final cells = <Widget>[];
+      for (int col = 0; col < 7; col++) {
+        if ((row == 0 && col < startOffset) || day > daysInMonth) {
+          cells.add(const Expanded(child: SizedBox(height: 76, width: 0)));
+        } else {
+          cells.add(Expanded(child: _buildDayCell(day, eventsByDay[day] ?? [], maxCols)));
+          day++;
+        }
+      }
+      rows.add(Padding(
+        padding: const EdgeInsets.only(bottom: 1),
+        child: Row(children: cells),
+      ));
+    }
+    return rows;
+  }
+
+  Widget _buildDayCell(int day, List<Event> dayEvents, int maxCols) {
+    final displayEvents = dayEvents.take(maxCols).toList();
+    final hasMore = dayEvents.length > maxCols;
+    return Container(
+      height: 76,
+      decoration: BoxDecoration(
+        border: Border.all(color: calendarOutline, width: 0.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(left: 3, top: 2),
+            child: Text('$day', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: dateNumberColor)),
+          ),
+          if (displayEvents.isNotEmpty)
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 1),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(event.title,
-                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 4),
-                    Text('${event.date}  ${event.time}',
-                      style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
-                    ),
-                    Text(event.location,
-                      style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                    ...displayEvents.map((e) => _buildEventBox(e)),
+                    if (hasMore)
+                      Text('+${dayEvents.length - maxCols}', style: const TextStyle(fontSize: 8, color: Colors.grey)),
                   ],
                 ),
               ),
-              const SizedBox(width: 8),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  if (isFull)
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: Colors.red.shade50,
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: const Text('FULL', style: TextStyle(color: Colors.red, fontSize: 11, fontWeight: FontWeight.bold)),
-                    ),
-                  if (!unlimited)
-                    Text('${event.registeredCount}/${event.capacity}',
-                      style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
-                    ),
-                  const SizedBox(height: 4),
-                  const Icon(Icons.chevron_right, size: 20),
-                ],
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEventBox(Event event) {
+    final color = _eventColor(event);
+    return GestureDetector(
+      onTap: () => _selectEvent(event),
+      child: Container(
+        height: 22,
+        margin: const EdgeInsets.only(bottom: 2),
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: BorderRadius.circular(3),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 3),
+          child: Row(
+            children: [
+              Flexible(
+                flex: 1,
+                fit: FlexFit.loose,
+                child: Text(
+                  event.title,
+                  style: const TextStyle(color: Colors.white, fontSize: 9, height: 2.2),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
+              if (event.type == 'campus')
+                const Icon(Icons.auto_awesome, size: 10, color: Colors.yellowAccent),
             ],
           ),
         ),
       ),
     );
   }
-}
 
-class _EventDetailSheet extends StatefulWidget {
-  final Event event;
-  final bool isRegistered;
-  final int userId;
-  final VoidCallback onChanged;
+  // ─── LIST VIEW ──────────────────────────────────────────────────
 
-  const _EventDetailSheet({
-    required this.event,
-    required this.isRegistered,
-    required this.userId,
-    required this.onChanged,
-  });
-
-  @override
-  State<_EventDetailSheet> createState() => _EventDetailSheetState();
-}
-
-class _EventDetailSheetState extends State<_EventDetailSheet> {
-  late bool _isRegistered;
-  late Event _event;
-  bool _isLoading = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _isRegistered = widget.isRegistered;
-    _event = widget.event;
-  }
-
-  Future<void> _register() async {
-    setState(() => _isLoading = true);
-    final success = await DatabaseHelper.instance.registerForEvent(
-      _event.id!, widget.userId,
-    );
-    if (!mounted) return;
-    if (success) {
-      final events = await DatabaseHelper.instance.getEventsByType(_event.type);
-      final updated = events.firstWhere((e) => e.id == _event.id);
-      setState(() {
-        _isRegistered = true;
-        _event = updated;
-      });
-      widget.onChanged();
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('You are already registered for this event')),
-      );
+  Widget _buildEventList() {
+    if (_filteredEvents.isEmpty) {
+      return Center(child: Text(_allMonthEvents.isEmpty ? 'No events this month' : 'No events match your search'));
     }
-    setState(() => _isLoading = false);
-  }
-
-  Future<void> _cancelRegistration() async {
-    setState(() => _isLoading = true);
-    final success = await DatabaseHelper.instance.cancelRegistration(
-      _event.id!, widget.userId,
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      itemCount: _filteredEvents.length,
+      itemBuilder: (context, i) => _buildListEntry(_filteredEvents[i]),
     );
-    if (!mounted) return;
-    if (success) {
-      final events = await DatabaseHelper.instance.getEventsByType(_event.type);
-      final updated = events.firstWhere((e) => e.id == _event.id);
-      setState(() {
-        _isRegistered = false;
-        _event = updated;
-      });
-      widget.onChanged();
-    }
-    setState(() => _isLoading = false);
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final bool isFull = _event.registeredCount >= _event.capacity;
-    final bool unlimited = _event.capacity >= 9999;
+  Widget _buildListEntry(Event event) {
+    final color = _eventColor(event);
+    final isSelected = _selectedEvent?.id == event.id;
+    final dt = DateTime.tryParse(event.date);
+    final weekday = dt != null ? _weekdays[dt.weekday % 7] : '';
+    final day = event.date.length >= 10 ? event.date.substring(8, 10) : event.date;
+    final month = event.date.length >= 7 ? event.date.substring(5, 7) : '';
 
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(_event.title,
-            style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 16),
-
-          _infoRow(Icons.calendar_today, _event.date),
-          const SizedBox(height: 8),
-          _infoRow(Icons.access_time, _event.time),
-          const SizedBox(height: 8),
-          _infoRow(Icons.location_on, _event.location),
-          const SizedBox(height: 8),
-          _infoRow(Icons.people,
-            unlimited ? 'Unlimited capacity' : 'Capacity: ${_event.registeredCount}/${_event.capacity}'),
-          const SizedBox(height: 12),
-
-          if (isFull)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: Colors.red.shade50,
-                borderRadius: BorderRadius.circular(6),
+    return GestureDetector(
+      onTap: () => _selectEvent(event),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 6),
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? color.withValues(alpha: 0.08) : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+          border: isSelected ? Border.all(color: color, width: 1) : null,
+        ),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 32,
+              child: Column(
+                children: [
+                  Text(day, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: dateNumberColor)),
+                  Text(month, style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                ],
               ),
-              child: const Text('Event Full', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
             ),
-          if (_isRegistered)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: Colors.green.shade50,
-                borderRadius: BorderRadius.circular(6),
+            const SizedBox(width: 8),
+            SizedBox(
+              width: 36,
+              child: Text(weekday, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+            ),
+            const SizedBox(width: 4),
+            Expanded(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                decoration: BoxDecoration(
+                  color: color,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(event.title,
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 13),
+                        maxLines: 1, overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (event.type == 'campus')
+                      const Icon(Icons.auto_awesome, size: 14, color: Colors.yellowAccent),
+                  ],
+                ),
               ),
-              child: const Text('You are registered', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
             ),
-
-          const SizedBox(height: 12),
-          Text(_event.description, style: const TextStyle(fontSize: 14, height: 1.4)),
-          const SizedBox(height: 20),
-
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: _isLoading ? null : (_isRegistered ? _cancelRegistration : (isFull ? null : _register)),
-              style: _isRegistered
-                ? ElevatedButton.styleFrom(backgroundColor: Colors.red.shade100)
-                : null,
-              child: _isLoading
-                ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                : Text(_isRegistered ? 'Cancel Registration' : (isFull ? 'Event Full' : 'Register')),
-            ),
-          ),
-          const SizedBox(height: 8),
-        ],
+          ],
+        ),
       ),
     );
   }
 
-  Widget _infoRow(IconData icon, String text) {
+  // ─── DETAILS PANEL ──────────────────────────────────────────────
+
+  Widget _buildDetailsPanel() {
+    if (_selectedEvent == null) {
+      return const Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.touch_app, size: 32, color: Colors.grey),
+            SizedBox(height: 8),
+            Text('Select an event to view details', style: TextStyle(color: Colors.grey, fontSize: 14)),
+          ],
+        ),
+      );
+    }
+
+    final e = _selectedEvent!;
+    final color = _eventColor(e);
+    final contrast = _contrastColor(e.type);
+    final isFull = e.registeredCount >= e.capacity;
+    final unlimited = e.capacity >= 9999;
+
+    return Container(
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: color, width: 3)),
+      ),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Type badge + title
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: color,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(e.type == 'academic' ? 'Academic' : 'Campus',
+                    style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(e.title,
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                    maxLines: 2, overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+
+            // Info rows
+            _infoRow(Icons.calendar_today, _formatDate(e.date)),
+            const SizedBox(height: 4),
+            _infoRow(Icons.access_time, _formatTime(e.time)),
+            const SizedBox(height: 4),
+            GestureDetector(
+              onTap: () {
+                Navigator.push(context, MaterialPageRoute(
+                  builder: (_) => LocationScreen(event: e, eventColor: color),
+                ));
+              },
+              child: _infoRow(Icons.location_on, e.location, action: 'Map'),
+            ),
+            const SizedBox(height: 4),
+
+            // Capacity bar
+            Row(
+              children: [
+                Icon(Icons.people, size: 16, color: Colors.grey.shade600),
+                const SizedBox(width: 6),
+                Text(unlimited ? 'Unlimited capacity' : '${e.registeredCount}/${e.capacity} registered',
+                  style: const TextStyle(fontSize: 13),
+                ),
+                const Spacer(),
+                if (isFull)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(color: Colors.red.shade50, borderRadius: BorderRadius.circular(4)),
+                    child: const Text('FULL', style: TextStyle(color: Colors.red, fontSize: 11, fontWeight: FontWeight.bold)),
+                  ),
+                if (_isRegistered)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(color: Colors.green.shade50, borderRadius: BorderRadius.circular(4)),
+                    child: const Text('REGISTERED', style: TextStyle(color: Colors.green, fontSize: 11, fontWeight: FontWeight.bold)),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 6),
+
+            // Description
+            if (e.description.isNotEmpty)
+              Text(e.description, style: const TextStyle(fontSize: 13, height: 1.3, color: Colors.black87)),
+
+            const SizedBox(height: 8),
+
+            // Register button
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: _isRegistered
+                    ? _cancelRegistration
+                    : (isFull ? null : _registerForEvent),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _isRegistered ? Colors.grey.shade300 : contrast,
+                  foregroundColor: _isRegistered ? Colors.black87 : Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                ),
+                child: Text(
+                  _isRegistered ? 'Cancel Registration'
+                      : isFull ? 'Event Full'
+                      : 'Register',
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _infoRow(IconData icon, String text, {String? action}) {
     return Row(
       children: [
-        Icon(icon, size: 18, color: Colors.grey.shade600),
-        const SizedBox(width: 8),
-        Expanded(child: Text(text, style: const TextStyle(fontSize: 14))),
+        Icon(icon, size: 16, color: Colors.grey.shade600),
+        const SizedBox(width: 6),
+        Expanded(child: Text(text, style: const TextStyle(fontSize: 13))),
+        if (action != null)
+          Text(action, style: const TextStyle(fontSize: 12, color: Colors.blue, fontWeight: FontWeight.w500)),
       ],
     );
+  }
+
+  String _formatDate(String iso) {
+    final parts = iso.split('-');
+    if (parts.length != 3) return iso;
+    final m = int.tryParse(parts[1]) ?? 0;
+    final d = int.tryParse(parts[2]) ?? 0;
+    return '${_monthNames[m - 1]} $d, ${parts[0]}';
+  }
+
+  String _formatTime(String t) {
+    final parts = t.split(':');
+    if (parts.length != 2) return t;
+    final h = int.tryParse(parts[0]) ?? 0;
+    final min = parts[1];
+    final ampm = h >= 12 ? 'PM' : 'AM';
+    final h12 = h == 0 ? 12 : (h > 12 ? h - 12 : h);
+    return '$h12:$min $ampm';
   }
 }

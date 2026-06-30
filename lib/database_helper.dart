@@ -173,6 +173,18 @@ class DatabaseHelper {
     return result.map((m) => m['event_id'] as int).toList();
   }
 
+  Future<List<Event>> getEventsByMonth(int year, int month) async {
+    Database db = await instance.db;
+    final prefix = '$year-${month.toString().padLeft(2, '0')}';
+    final result = await db.query(
+      'gfg_events',
+      where: 'date LIKE ?',
+      whereArgs: ['$prefix%'],
+      orderBy: 'date ASC, time ASC',
+    );
+    return result.map((map) => Event.fromMap(map)).toList();
+  }
+
   Future<bool> cancelRegistration(int eventId, int userId) async {
     Database db = await instance.db;
     try {

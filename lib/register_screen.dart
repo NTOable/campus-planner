@@ -1,50 +1,72 @@
 import 'package:flutter/material.dart';
 import 'package:campus_planner/database_helper.dart';
 import 'package:campus_planner/user.dart';
-import 'package:campus_planner/home_screen.dart';
-import 'package:campus_planner/register_screen.dart';
 import 'package:campus_planner/home_screen.dart' as theme;
 
-class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+class RegisterScreen extends StatefulWidget {
+  const RegisterScreen({super.key});
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  State<RegisterScreen> createState() => _RegisterScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
-  final emailController = TextEditingController();
-  final passwordController = TextEditingController();
+class _RegisterScreenState extends State<RegisterScreen> {
+  final _usernameController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
   bool _isLoading = false;
 
-  Future<void> signIn() async {
-    String email = emailController.text.trim();
-    String password = passwordController.text.trim();
+  Future<void> _register() async {
+    final username = _usernameController.text.trim();
+    final email = _emailController.text.trim();
+    final password = _passwordController.text;
+    final confirmPassword = _confirmPasswordController.text;
 
-    if (email.isEmpty || password.isEmpty) {
-      _showSnack('Please enter your email and password');
+    if (username.isEmpty || email.isEmpty || password.isEmpty) {
+      _showSnack('Please fill in all fields');
       return;
     }
 
     if (!email.endsWith('@ciit.edu.ph')) {
-      _showSnack('Use your CIIT email (@ciit.edu.ph)');
+      _showSnack('Only @ciit.edu.ph email addresses are allowed');
+      return;
+    }
+
+    if (password.length < 6) {
+      _showSnack('Password must be at least 6 characters');
+      return;
+    }
+
+    if (password != confirmPassword) {
+      _showSnack('Passwords do not match');
       return;
     }
 
     setState(() => _isLoading = true);
 
-    User? user = await DatabaseHelper.instance.login(email, password);
+    final exists = await DatabaseHelper.instance.emailExists(email);
+    if (exists) {
+      setState(() => _isLoading = false);
+      _showSnack('An account with this email already exists');
+      return;
+    }
 
-    setState(() => _isLoading = false);
+    final user = User(
+      username: username,
+      email: email,
+      password: password,
+    );
 
-    if (user != null) {
+    try {
+      await DatabaseHelper.instance.insertUser(user);
       if (!mounted) return;
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => HomeScreen(user: user)),
-      );
-    } else {
-      _showSnack('Invalid email or password');
+      _showSnack('Registration successful! Please sign in.');
+      Navigator.pop(context);
+    } catch (e) {
+      _showSnack('Registration failed. Please try again.');
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -56,14 +78,21 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   void dispose() {
-    emailController.dispose();
-    passwordController.dispose();
+    _usernameController.dispose();
+    _emailController.dispose();
+    _passwordController.dispose();
+    _confirmPasswordController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(
+        title: const Text('Create Account'),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+      ),
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
@@ -92,41 +121,66 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                           borderRadius: BorderRadius.circular(15),
                         ),
-                        child: const Icon(Icons.calendar_month, color: Colors.white, size: 32),
+                        child: const Icon(Icons.person_add, color: Colors.white, size: 30),
                       ),
                       const SizedBox(height: 16),
                       const Text(
-                        "Campus Planner",
-                        style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
+                        'Create Account',
+                        style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        "CIIT Event Management",
+                        'Register with your CIIT email',
                         style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
                       ),
-                      const SizedBox(height: 28),
+                      const SizedBox(height: 24),
 
                       TextField(
-                        controller: emailController,
+                        controller: _usernameController,
+                        decoration: InputDecoration(
+                          labelText: 'Username',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                          prefixIcon: const Icon(Icons.person),
+                          filled: true,
+                          fillColor: Colors.grey.shade50,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+
+                      TextField(
+                        controller: _emailController,
                         keyboardType: TextInputType.emailAddress,
                         decoration: InputDecoration(
-                          labelText: "CIIT Email",
-                          hintText: "yourname@ciit.edu.ph",
+                          labelText: 'CIIT Email',
+                          hintText: 'yourname@ciit.edu.ph',
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                           prefixIcon: const Icon(Icons.email),
                           filled: true,
                           fillColor: Colors.grey.shade50,
                         ),
                       ),
-                      const SizedBox(height: 14),
+                      const SizedBox(height: 12),
 
                       TextField(
-                        controller: passwordController,
+                        controller: _passwordController,
                         obscureText: true,
                         decoration: InputDecoration(
-                          labelText: "Password",
+                          labelText: 'Password',
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                           prefixIcon: const Icon(Icons.lock),
+                          filled: true,
+                          fillColor: Colors.grey.shade50,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+
+                      TextField(
+                        controller: _confirmPasswordController,
+                        obscureText: true,
+                        decoration: InputDecoration(
+                          labelText: 'Confirm Password',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                          prefixIcon: const Icon(Icons.lock_outline),
                           filled: true,
                           fillColor: Colors.grey.shade50,
                         ),
@@ -136,35 +190,30 @@ class _LoginScreenState extends State<LoginScreen> {
                       SizedBox(
                         width: double.infinity,
                         child: ElevatedButton(
-                          onPressed: _isLoading ? null : signIn,
+                          onPressed: _isLoading ? null : _register,
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: theme.academicColor,
+                            backgroundColor: theme.campusColor,
                             foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(vertical: 14),
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                           ),
                           child: _isLoading
                               ? const SizedBox(height: 22, width: 22, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                              : const Text("Sign In", style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                              : const Text('Register', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
                         ),
                       ),
                       const SizedBox(height: 12),
 
                       TextButton(
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (_) => const RegisterScreen()),
-                          );
-                        },
+                        onPressed: () => Navigator.pop(context),
                         child: Text.rich(
                           TextSpan(
-                            text: "Don't have an account? ",
+                            text: "Already have an account? ",
                             style: TextStyle(color: Colors.grey.shade600),
                             children: const [
                               TextSpan(
-                                text: "Register",
-                                style: TextStyle(color: theme.campusColor, fontWeight: FontWeight.w600),
+                                text: "Sign in",
+                                style: TextStyle(color: theme.academicColor, fontWeight: FontWeight.w600),
                               ),
                             ],
                           ),
