@@ -1,7 +1,6 @@
-<<<<<<< HEAD
-# campus_planner
+# campus-scheduler-app
 
-A new Flutter project.
+Campus scheduler mobile app.
 
 ## Getting Started
 
@@ -16,6 +15,3 @@ A few resources to get you started if this is your first Flutter project:
 For help getting started with Flutter development, view the
 [online documentation](https://docs.flutter.dev/), which offers tutorials,
 samples, guidance on mobile development, and a full API reference.
-=======
-# campus-planner
->>>>>>> 2fa463c74c1d72f78d538b6b38bad9f18b5ae665
